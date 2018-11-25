@@ -20,7 +20,7 @@ main args {
 }
 ***/
 Start
-   = WsNL* statements:TopLevelStatement* WsNL* EOF? {
+   = WsNL* statements:TopLevelStatement* WsNL* {
       return statements
    }
 
@@ -28,23 +28,32 @@ WsNL = [ \t\r\n]+
 
 Ws = [ \t]+
 
-EOF = [^.]
-
-TypeParameterName
+TypeParameterName "type parameter"
    = name:($[a-z]+) {
       return withLoc({ type: 'type-parameter', name: name })
    }
 
-Keyword
-   = "fn"
+Keyword "keyword"
+   = ("fn"
+   / "let"
+   / "in"
+   / "record"
+   / "union"
+   / "if"
+   / "else"
+   / "then") WsNL
 
-ProperIdentifier
-   = $ ([A-Z][A-Za-z0-9_]+)
+ProperIdentifier "upper identifier"
+   = id:([A-Z][A-Za-z0-9_]*) {
+      return withLoc({ type: 'upper-identifier', name: id })
+   }
 
-Identifier
-   = $ ([a-z][A-Za-z0-9_]+)
+Identifier "lower identifier"
+   = id:( !(&Keyword) x:($([a-z][A-Za-z0-9_]*)) { return x }) {
+      return withLoc({ type: 'lower-identifier', name: id })
+   }
 
-Number
+Number "number"
    = value:([0-9]+) {
       return withLoc({
          type: 'number',
@@ -52,7 +61,7 @@ Number
       });
    }
 
-String
+String "string"
    = value:($([\"] [^\"]* [\"])) {
       return withLoc({
          type: 'string',
@@ -60,12 +69,75 @@ String
       });
    }
 
-Literal
+Literal "literal"
    = Number
    / String
 
+/***
+let
+   foo { print "a" }
+in {
+   print "hello world"
+}
+***/
+LetExpression "let expression" =
+   "let" WsNL
+   fns:(fn:FunctionDeclaration WsNL { return fn })+
+   "in" WsNL?
+   body:FunctionBlock {
+      return withLoc({
+         type: 'let-expression',
+         bindings: fns,
+         body: body,
+      })
+   }
+
+/***
+if a == b then
+   1
+else
+   2
+***/
+IfExpression "if expression" =
+   "if" WsNL pred:Expression WsNL
+   "then" WsNL t:Expression WsNL
+   "else" WsNL f:Expression {
+      return {
+         type: 'if-expression',
+         predicate: pred,
+         true_expression: t,
+         false_expression: f,
+      }
+   }
+
+Operand "operand"
+   = ParenthesizedExpression
+   / Identifier
+   / Literal
+
+InfixOperator "infix op" = $( "==" / "!=" )
+
+InfixApplication "infix application" =
+   left:Operand Ws? expr:InfixApplication_ {
+      return withLoc({
+         type: 'infix-application',
+         operator: expr.operator,
+         left: left,
+         right: expr.expr,
+      })
+   }
+
+InfixApplication_ =
+   (op:InfixOperator Ws? expr:InfixApplication_ {
+      return {
+         operator: op,
+         expr: expr,
+      }
+   })
+   / Operand
+
 Application
-   = name:Identifier exprs:(WsNL e:Expression { return e; })* {
+   = name:Identifier exprs:(Ws e:Expression { return e; })* {
       return withLoc({
          type: 'application',
          name: name,
@@ -74,7 +146,10 @@ Application
    }
 
 ExpressionBase
-   = Application
+   = LetExpression
+   / IfExpression
+   / InfixApplication
+   / Application
    / Literal
 
 ParenthesizedExpression
@@ -90,19 +165,29 @@ NameType
    }
 
 FunctionParameters
-   = head:Identifier tail:(Ws n:Identifier { return n }) {
+   = head:Identifier tail:(Ws n:Identifier { return n })* {
       return [head].concat(tail)
    }
 
+FunctionBlock "function-block" =
+   "{" WsNL?
+   body:Expression
+   WsNL? "}" {
+      return withLoc({
+         type: 'function-block',
+         body: body,
+      })
+   }
+
 FunctionDeclaration =
-   name:Identifier Ws?
-   parameters:FunctionParameters? WsNL?
-   body:("{" WsNL? e:Expression* WsNL? "}" { return e }) {
+   name:Identifier
+   parameters:(Ws p:FunctionParameters { return p })? WsNL?
+   body:FunctionBlock {
       return {
          type: 'function',
          name: name,
-         body: body,
          parameters: parameters || [],
+         body: body,
       }
    }
 
