@@ -1,3 +1,5 @@
-import { AST } from "./ast";
+import { AST } from './ast'
 
-export function generator(ast: AST) {}
+export function generate(ast: AST): string {
+   return ''
+}
