@@ -20,8 +20,29 @@ export interface Locatable {
 }
 
 export type Exposed = { type: 'type' | 'function' | 'constructor'; name: string; location: Location | null }
+export type StringLiteral = { type: 'string'; value: string } & Locatable
+export type NumberLiteral = { type: 'number'; value: string } & Locatable
+export type Literal = StringLiteral | NumberLiteral
+export type Application = { type: 'application'; name: Identifier; parameters: Expression[] } & Locatable
+export type LetExpression = { type: 'let-expression'; bindings: FunctionDeclaration[]; body: Expression } & Locatable
+export type IfExpression = {
+   type: 'if-expression'
+   predicate: Expression
+   true_expression: Expression
+   false_expression: Expression
+} & Locatable
+export type Expression = Application | LetExpression | IfExpression | Literal
+export type Identifier = {
+   type: 'lower-identifier' | 'upper-identifier'
+   value: string
+} & Locatable
 
-export type FunctionDeclaration = { type: 'function-declaration'; name: string; parameters: string[] } & Locatable
+export type FunctionDeclaration = {
+   type: 'function-declaration'
+   name: Identifier
+   parameters: Identifier[]
+   body: Expression
+} & Locatable
 
 export type FunctionAnnotation = { type: 'function-annotation'; name: string; type_annotation: string } & Locatable
 
@@ -76,4 +97,10 @@ export interface ModuleView {
       declaration: FunctionDeclaration
       annotation: FunctionAnnotation
    }[]
+}
+
+export type Statement = FunctionDeclaration
+
+export interface JMLProgram {
+   statements: Statement[]
 }

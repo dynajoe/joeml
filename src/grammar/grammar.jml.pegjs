@@ -20,13 +20,15 @@ main args {
 }
 ***/
 Start
-   = WsNL* statements:TopLevelStatement* WsNL* {
-      return statements
+   = statements:(WsNL* s:TopLevelStatement { return s })* WsNL* EOF? {
+      return { statements: statements }
    }
 
 WsNL = [ \t\r\n]+
 
 Ws = [ \t]+
+
+EOF = [^.]
 
 TypeParameterName "type parameter"
    = name:($[a-z]+) {
@@ -45,16 +47,16 @@ Keyword "keyword"
 
 ProperIdentifier "upper identifier"
    = id:([A-Z][A-Za-z0-9_]*) {
-      return withLoc({ type: 'upper-identifier', name: id })
+      return withLoc({ type: 'upper-identifier', value: id })
    }
 
 Identifier "lower identifier"
    = id:( !(&Keyword) x:($([a-z][A-Za-z0-9_]*)) { return x }) {
-      return withLoc({ type: 'lower-identifier', name: id })
+      return withLoc({ type: 'lower-identifier', value: id })
    }
 
 Number "number"
-   = value:([0-9]+) {
+   = value:($[0-9]+) {
       return withLoc({
          type: 'number',
          value: value,
@@ -112,52 +114,46 @@ IfExpression "if expression" =
 
 Operand "operand"
    = ParenthesizedExpression
-   / Identifier
+   / LetExpression
+   / IfExpression
    / Literal
+   / Application
 
-InfixOperator "infix op" = $( "==" / "!=" )
-
-InfixApplication "infix application" =
-   left:Operand Ws? expr:InfixApplication_ {
-      return withLoc({
-         type: 'infix-application',
-         operator: expr.operator,
-         left: left,
-         right: expr.expr,
-      })
+InfixOperator "infix op"
+   = op:( "==" / "!=" / "+" / "*" / "-" ) {
+      return withLoc({ type: 'lower-identifier', value: op })
    }
 
-InfixApplication_ =
-   (op:InfixOperator Ws? expr:InfixApplication_ {
-      return {
-         operator: op,
-         expr: expr,
-      }
-   })
+CallOrOperand
+   = Application
    / Operand
 
 Application
-   = name:Identifier exprs:(Ws e:Expression { return e; })* {
+   = name:Identifier operands:(Ws e:Operand { return e; })* {
       return withLoc({
          type: 'application',
          name: name,
-         parameters: exprs
+         parameters: operands
       })
    }
 
-ExpressionBase
-   = LetExpression
-   / IfExpression
-   / InfixApplication
-   / Application
-   / Literal
-
 ParenthesizedExpression
-   = "(" WsNL? expr:ExpressionBase WsNL? ")" { return expr; }
+   = "(" WsNL? expr:Expression WsNL? ")" { return expr; }
 
 Expression
-   = ExpressionBase
-   / ParenthesizedExpression
+   = expr:CallOrOperand rhs:(Ws? i:InfixOperator Ws? r:CallOrOperand { return { r: r, i: i } })* {
+      if (rhs.length > 0) {
+         return rhs.reverse().reduce((acc, r) => {
+            return {
+               type: 'application',
+               name: r.i,
+               parameters: [acc, r.r],
+            }
+         }, expr)
+      } else {
+         return expr
+      }
+   }
 
 NameType
    = name:Identifier ":" type:Type {
@@ -173,10 +169,7 @@ FunctionBlock "function-block" =
    "{" WsNL?
    body:Expression
    WsNL? "}" {
-      return withLoc({
-         type: 'function-block',
-         body: body,
-      })
+      return body
    }
 
 FunctionDeclaration =
@@ -184,7 +177,7 @@ FunctionDeclaration =
    parameters:(Ws p:FunctionParameters { return p })? WsNL?
    body:FunctionBlock {
       return {
-         type: 'function',
+         type: 'function-declaration',
          name: name,
          parameters: parameters || [],
          body: body,
