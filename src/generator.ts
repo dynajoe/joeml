@@ -11,6 +11,7 @@ const infixFns: { [key: string]: string } = {
 
 export interface Ctx {
    indent: number
+   expect_return?: boolean
    fn: T.FunctionDeclaration
 }
 
@@ -45,57 +46,53 @@ export function trimIndentation(str: string): string {
    }
 }
 
-// const indented = (ctx: Ctx, str: string) => {
-//    const matches = str.match(/^[ ]+/m)
-
-//    const indentation = new Array(ctx.indent).join(' ')
-
-//    if (matches) {
-//       return trimIndentation(str)
-//          .split('\n')
-//          .join(`\n${indentation}`)
-//    } else {
-//       return str
-//    }
-// }
-
 function makeLetExpression(ctx: Ctx, let_expr: T.LetExpression): string {
    return `function () { // let expression
       ${let_expr.bindings.map(b => generateFunction(ctx, b)).join('\n\n')}
 
-      return (${generateExpression(ctx, let_expr.body)});
+      return (${generateExpression({ ...ctx, expect_return: false }, let_expr.body)});
    }()`
 }
 
 function makeFunctionCall(ctx: Ctx, fn: T.Application): string {
-   const call_target = _.isNil(infixFns[fn.name.value]) ? fn.name.value : `infix['${fn.name.value}']`
-
    if (ctx.fn.name.value === fn.name.value && ctx.fn.parameters.length === fn.parameters.length) {
       return `
          ${_.zipWith(
             ctx.fn.parameters,
             fn.parameters,
-            (id, expr) => `var $${id.value} = ${generateExpression(ctx, expr)};`
+            (id, expr) => `var $$${id.value} = ${generateExpression({ ...ctx, expect_return: false }, expr)};`
          ).join('\n\n')}
 
-         ${_.map(ctx.fn.parameters, id => `${id.value} = _${id.value};`).join('\n\n')}
+         ${_.map(ctx.fn.parameters, id => `${id.value} = $$${id.value};`).join('\n\n')}
 
          continue ${fn.name.value};
       `
    } else {
-      if (fn.parameters.length == 0) {
-         return `${call_target}`
-      } else {
-         return `${call_target}(${fn.parameters.map(p => generateExpression(ctx, p)).join(',')})`
-      }
+      const parameter_expressions = fn.parameters.map(p => generateExpression({ ...ctx, expect_return: false }, p))
+      const parameters = fn.parameters.length === 0 ? '' : `(${parameter_expressions.join(', ')})`
+
+      const function_application = _.isNil(infixFns[fn.name.value])
+         ? `${fn.name.value}${parameters}`
+         : `${parameter_expressions[0]} ${fn.name.value} ${parameter_expressions[1]}`
+
+      return `${ctx.expect_return ? 'return' : ''} ${function_application}`
    }
 }
 
 export function makeIfExpression(ctx: Ctx, expr: T.IfExpression): string {
+   if (ctx.expect_return) {
+      return `
+      if (${generateExpression({ ...ctx, expect_return: false }, expr.predicate)}) {
+         ${generateExpression({ ...ctx, expect_return: true }, expr.true_expression)}
+      } else {
+         ${generateExpression({ ...ctx, expect_return: true }, expr.false_expression)}
+      }`
+   }
+
    return `
       ${generateExpression(ctx, expr.predicate)}
          ? ${generateExpression(ctx, expr.true_expression)}
-         : ${generateExpression(ctx, expr.false_expression)};
+         : ${generateExpression(ctx, expr.false_expression)}
    `
 }
 
@@ -107,15 +104,15 @@ export function generateExpression(ctx: Ctx, expr: T.Expression): string {
    } else if (expr.type === 'if-expression') {
       return makeIfExpression(ctx, expr)
    } else if (expr.type === 'string') {
-      return `${expr.value}`
+      return `${ctx.expect_return ? `return ${expr.value};` : expr.value}`
    } else if (expr.type === 'number') {
-      return parseInt(expr.value).toString()
+      return `${ctx.expect_return ? `return ${parseInt(expr.value).toString()};` : parseInt(expr.value).toString()}`
    }
 
    throw new Error('unhandled expression: ' + JSON.stringify(expr, null, 2))
 }
 
-function leavesOfType<T>(t: string, n: T.Expression): T[] {
+function leavesOfType<T extends T.Expression>(t: string, n: T.Expression): T[] {
    let leaves: T[] = []
 
    if (n.type === 'if-expression') {
@@ -129,32 +126,29 @@ function leavesOfType<T>(t: string, n: T.Expression): T[] {
    } else if (n.type === 'application') {
       leaves = []
    } else {
-      const _exhaustive_check: never = n
-      console.log(_exhaustive_check)
+      throw new Error(`Unhandled expression ${JSON.stringify(n)}.`)
    }
 
    if (!_.isEmpty(leaves)) {
       return leaves
    } else {
-      return n.type === t ? [(n as any) as T] : []
+      return n.type === t ? [n as T] : []
    }
 }
 
 export function generateFunction(ctx: Ctx, fn: T.FunctionDeclaration): string {
-   const new_context = { ...ctx, fn: fn }
-   const tail_calls = leavesOfType<T.Application>('application', fn.body).find(x => x.name.value === fn.name.value)
+   const application_leaves = leavesOfType<T.Application>('application', fn.body)
+   const tail_calls = application_leaves.filter(x => x.name.value === fn.name.value)
 
    function makeBody(): string {
-      const body = generateExpression(new_context, fn.body)
-
       if (_.isEmpty(tail_calls)) {
-         return body
+         return generateExpression({ ...ctx, expect_return: true, fn: fn }, fn.body)
       }
 
       return `
       ${fn.name.value}:
       while (true) {
-         ${body}
+         ${generateExpression({ ...ctx, expect_return: true, fn: fn }, fn.body)};
       }`
    }
 

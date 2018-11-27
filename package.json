@@ -10,7 +10,7 @@
     "build-ts": "tsc",
     "build": "npm run build-parser && npm run build-ts",
     "pretest": "npm run build",
-    "test": "mocha dist/test/**/*_test.js --require source-map-support/register"
+    "test": "mocha dist/test/**/*_test.js --inspect-brk --require source-map-support/register"
   },
   "author": "",
   "license": "ISC",

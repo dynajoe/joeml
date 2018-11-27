@@ -41,13 +41,12 @@ describe('Hello World', () => {
       expect(result.stdout).to.equal('2')
    })
 
-   it('should be able to evaluate the combination of multiple function evaluations', () => {
+   it.only('should be able to evaluate the combination of multiple function evaluations', () => {
       const [result] = runProgram(`
          foo { 1 }
          bar { 2 }
          main args { print (bar + foo) }
       `)
-
       expect(result.stdout).to.equal('3')
    })
 
@@ -78,18 +77,18 @@ describe('Hello World', () => {
       expect(result.stdout).to.equal('2')
    })
 
-   describe('factorial', () => {
+   describe('fib', () => {
       it('should work', () => {
          const [result] = runProgram(`
-            factorial n {
+            fib n {
                if n == 0 then
                   1
                else
-                  factorial (n - 1) * n
+                  fib (n - 1) * n
             }
 
             main args {
-               print (factorial 5)
+               print (fib 5)
             }
          `)
 
@@ -97,18 +96,25 @@ describe('Hello World', () => {
       })
 
       it('tail recursion', () => {
-         const [result, , generated] = runProgram(`
-            factorial n {
+         const [result] = runProgram(`
+            fibHelp n a b {
                if n == 0 then
-                  1
+                  a
                else
-                  factorial (n - 1) * n
+                  if n == 1 then
+                     b
+                  else
+                     fibHelp (n - 1) (b) (a + b)
             }
 
-            main args { (factorial 3000) }
+            fib n {
+               fibHelp (n) (0) (1)
+            }
+
+            main args { print (fib 3000) }
          `)
-         console.log(generated)
-         expect(result.stdout).to.equal('11')
+
+         expect(result.stdout).to.equal('Infinity')
       })
    })
 })
