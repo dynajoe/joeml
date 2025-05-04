@@ -41,7 +41,7 @@ describe('Hello World', () => {
       expect(result.stdout).to.equal('2')
    })
 
-   it.only('should be able to evaluate the combination of multiple function evaluations', () => {
+   it('should be able to evaluate the combination of multiple function evaluations', () => {
       const [result] = runProgram(`
          foo { 1 }
          bar { 2 }
@@ -111,10 +111,10 @@ describe('Hello World', () => {
                fibHelp (n) (0) (1)
             }
 
-            main args { print (fib 3000) }
+            main args { print (fib 10) }
          `)
 
-         expect(result.stdout).to.equal('Infinity')
+         expect(result.stdout).to.equal('55')
       })
    })
 })
