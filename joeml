@@ -1,0 +1,5 @@
+#!/usr/bin/env node
+
+// Wrapper script for joeml CLI
+// This script requires building the project first
+require('./dist/src/cli.js');

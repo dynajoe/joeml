@@ -1,0 +1,11 @@
+foo n { 
+  n + 1
+}
+
+bar n { 
+  n + 2
+}
+
+main { 
+  foo 1 + bar 2
+}

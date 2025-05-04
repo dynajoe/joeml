@@ -1,0 +1,3 @@
+main {
+  printLn "Hello, World!"
+}

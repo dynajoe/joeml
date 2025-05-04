@@ -10,12 +10,14 @@
     "build-ts": "tsc",
     "build": "npm run build-parser && npm run build-ts",
     "pretest": "npm run build",
-    "test": "mocha dist/test/**/*_test.js --require source-map-support/register"
+    "test": "mocha dist/test/**/*_test.js --require source-map-support/register",
+    "joeml": "node dist/src/cli.js"
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "@types/chai": "^5.2.1",
+    "@types/js-beautify": "^1.14.3",
     "@types/lodash": "^4.17.16",
     "@types/mocha": "^10.0.10",
     "@types/node": "^22.15.3",
