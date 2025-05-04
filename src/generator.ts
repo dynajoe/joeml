@@ -1,5 +1,7 @@
 import * as T from './types'
-import * as _ from 'lodash'
+import _ from 'lodash'
+import beautify from 'js-beautify'
+import { parse } from './parser'
 
 const infixFns: { [key: string]: string } = {
    '==': `(a, b) => a === b`,
@@ -56,12 +58,14 @@ function makeLetExpression(ctx: Ctx, let_expr: T.LetExpression): string {
 
 function makeFunctionCall(ctx: Ctx, fn: T.Application): string {
    if (ctx.fn.name.value === fn.name.value && ctx.fn.parameters.length === fn.parameters.length) {
+      const params = _.zipWith(
+         ctx.fn.parameters,
+         fn.parameters,
+         (id, expr) => `var $$${id.value} = ${generateExpression({ ...ctx, expect_return: false }, expr)};`
+      ).join('\n\n')
+
       return `
-         ${_.zipWith(
-            ctx.fn.parameters,
-            fn.parameters,
-            (id, expr) => `var $$${id.value} = ${generateExpression({ ...ctx, expect_return: false }, expr)};`
-         ).join('\n\n')}
+         ${params}
 
          ${_.map(ctx.fn.parameters, id => `${id.value} = $$${id.value};`).join('\n\n')}
 
@@ -164,4 +168,18 @@ export function generate(program: T.JMLProgram): string {
    const ctx: Ctx = { indent: 0, fn: null }
 
    return wrapProgram(functions.map(f => generateFunction(ctx, f)).join('\n\n'))
+}
+
+export function compile(code: string, options: { beautify?: boolean } = {}): string {
+   try {
+      const ast = parse(code);
+      let jsCode = generate(ast);
+
+      return beautify.js(jsCode, {
+         indent_size: 2,
+         space_in_empty_paren: true
+      });
+   } catch (error) {
+      return `Error: ${error.message}`;
+   }
 }

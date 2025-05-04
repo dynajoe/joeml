@@ -1,11 +1,15 @@
-foo n { 
-  n + 1
+fibHelp n a b {
+    if n == 0 then
+      a
+    else
+      if n == 1 then
+          b
+      else
+          fibHelp (n - 1) (b) (a + b)
 }
 
-bar n { 
-  n + 2
+fib n {
+    fibHelp (n) (0) (1)
 }
 
-main { 
-  foo 1 + bar 2
-}
+main args { print (fib 10) }

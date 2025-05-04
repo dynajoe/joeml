@@ -1,36 +1,11 @@
 import * as fs from 'fs';
-import { parse } from './parser';
-import { generate } from './generator';
-import * as beautify from 'js-beautify';
-
-// Function to process joeml code and output generated JavaScript
-function processJoemlCode(code: string, options: { beautify?: boolean } = {}): string {
-  try {
-    // Parse the joeml code
-    const ast = parse(code);
-    
-    // Generate JavaScript from the AST
-    let jsCode = generate(ast);
-    
-    // Beautify the output if requested
-    if (options.beautify) {
-      jsCode = beautify.js(jsCode, {
-        indent_size: 2,
-        space_in_empty_paren: true
-      });
-    }
-    
-    return jsCode;
-  } catch (error) {
-    return `Error: ${error.message}`;
-  }
-}
+import { compile } from './generator';
 
 // Main function to handle CLI arguments
 function main() {
   const args = process.argv.slice(2);
   let code = '';
-  let options = { beautify: true };
+  let options = { };
   
   // Usage information
   if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
@@ -43,7 +18,6 @@ Usage:
 
 Options:
   -e, --eval      Evaluate joeml code string
-  -r, --raw       Output raw JavaScript (no beautification)
   -h, --help      Show this help
 `);
     process.exit(0);
@@ -61,8 +35,6 @@ Options:
         console.error('Error: No code provided after -e/--eval option');
         process.exit(1);
       }
-    } else if (arg === '-r' || arg === '--raw') {
-      options.beautify = false;
     } else if (!arg.startsWith('-') && code === '') {
       // If not an option and no code has been set yet, treat as file path
       try {
@@ -80,8 +52,7 @@ Options:
     process.exit(1);
   }
   
-  // Process the code and print the result
-  const jsCode = processJoemlCode(code, options);
+  const jsCode = compile(code, options);
   console.log(jsCode);
 }
 
@@ -89,6 +60,3 @@ Options:
 if (require.main === module) {
   main();
 }
-
-// Export for programmatic usage
-export { processJoemlCode };

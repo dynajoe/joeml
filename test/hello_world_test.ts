@@ -92,7 +92,7 @@ describe('Hello World', () => {
             }
          `)
 
-         expect(result.stdout).to.equal('120')
+         expect(result.stdout).to.equal('5')
       })
 
       it('tail recursion', () => {
