@@ -6,6 +6,10 @@ import { parse } from './parser'
 const infixFns: { [key: string]: string } = {
    '==': `(a, b) => a === b`,
    '!=': `(a, b) => a !== b`,
+   '<=': `(a, b) => a <= b`,
+   '>=': `(a, b) => a >= b`,
+   '<': `(a, b) => a < b`,
+   '>': `(a, b) => a > b`,
    '+': `(a, b) => a + b`,
    '-': `(a, b) => a - b`,
    '*': `(a, b) => a * b`,
@@ -49,15 +53,21 @@ export function trimIndentation(str: string): string {
 }
 
 function makeLetExpression(ctx: Ctx, let_expr: T.LetExpression): string {
-   return `function () { // let expression
+   return `(function () { // let expression
       ${let_expr.bindings.map(b => generateFunction(ctx, b)).join('\n\n')}
 
       return (${generateExpression({ ...ctx, expect_return: false }, let_expr.body)});
-   }()`
+   })()`
 }
 
 function makeFunctionCall(ctx: Ctx, fn: T.Application): string {
-   if (ctx.fn.name.value === fn.name.value && ctx.fn.parameters.length === fn.parameters.length) {
+   // Check if this call is a tail call by looking at all tail calls in the function
+   const tail_calls = tailCalls(ctx.fn.name.value, ctx.fn.body)
+   const isTailCall = tail_calls.some(tc => tc === fn)
+   
+   if (ctx.fn.name.value === fn.name.value && 
+       ctx.fn.parameters.length === fn.parameters.length && 
+       isTailCall) {
       const params = _.zipWith(
          ctx.fn.parameters,
          fn.parameters,
@@ -72,8 +82,14 @@ function makeFunctionCall(ctx: Ctx, fn: T.Application): string {
          continue ${fn.name.value};
       `
    } else {
+      // Check if this is a parameter reference (not a function call)
+      if (fn.parameters.length === 0 && ctx.fn && ctx.fn.parameters.some(p => p.value === fn.name.value)) {
+         // This is a parameter reference, not a function call
+         return `${ctx.expect_return ? 'return' : ''} ${fn.name.value}`
+      }
+      
       const parameter_expressions = fn.parameters.map(p => generateExpression({ ...ctx, expect_return: false }, p))
-      const parameters = fn.parameters.length === 0 ? '' : `(${parameter_expressions.join(', ')})`
+      const parameters = `(${parameter_expressions.join(', ')})`
 
       const function_application = _.isNil(infixFns[fn.name.value])
          ? `${fn.name.value}${parameters}`
@@ -116,33 +132,29 @@ export function generateExpression(ctx: Ctx, expr: T.Expression): string {
    throw new Error('unhandled expression: ' + JSON.stringify(expr, null, 2))
 }
 
-function leavesOfType<T extends T.Expression>(t: string, n: T.Expression): T[] {
-   let leaves: T[] = []
-
-   if (n.type === 'if-expression') {
-      leaves = _.flatMap([n.true_expression, n.false_expression], p => leavesOfType<T>(t, p))
-   } else if (n.type === 'let-expression') {
-      leaves = leavesOfType<T>(t, n.body)
-   } else if (n.type === 'number') {
-      leaves = []
-   } else if (n.type === 'string') {
-      leaves = []
-   } else if (n.type === 'application') {
-      leaves = []
+function tailCalls(fnName: string, expr: T.Expression): T.Application[] {
+   // A function call is in tail position if it's the last expression executed
+   // before returning from the function
+   
+   if (expr.type === 'application' && expr.name.value === fnName) {
+      return [expr]
+   } else if (expr.type === 'if-expression') {
+      // In an if expression, both branches can contain tail calls
+      return [
+         ...tailCalls(fnName, expr.true_expression),
+         ...tailCalls(fnName, expr.false_expression)
+      ]
+   } else if (expr.type === 'let-expression') {
+      // In a let expression, only the body can contain tail calls
+      return tailCalls(fnName, expr.body)
    } else {
-      throw new Error(`Unhandled expression ${JSON.stringify(n)}.`)
-   }
-
-   if (!_.isEmpty(leaves)) {
-      return leaves
-   } else {
-      return n.type === t ? [n as T] : []
+      // Other expressions (numbers, strings, non-recursive calls) can't contain tail calls
+      return []
    }
 }
 
 export function generateFunction(ctx: Ctx, fn: T.FunctionDeclaration): string {
-   const application_leaves = leavesOfType<T.Application>('application', fn.body)
-   const tail_calls = application_leaves.filter(x => x.name.value === fn.name.value)
+   const tail_calls = tailCalls(fn.name.value, fn.body)
 
    function makeBody(): string {
       if (_.isEmpty(tail_calls)) {
@@ -171,15 +183,15 @@ export function generate(program: T.JMLProgram): string {
 }
 
 export function compile(code: string, options: { beautify?: boolean } = {}): string {
-   try {
-      const ast = parse(code);
-      let jsCode = generate(ast);
+   const ast = parse(code);
+   let jsCode = generate(ast);
 
+   try {      
       return beautify.js(jsCode, {
          indent_size: 2,
          space_in_empty_paren: true
       });
    } catch (error) {
-      return `Error: ${error.message}`;
+      return `Error: ${error.message}\n\n${jsCode}`;
    }
 }

@@ -81,10 +81,10 @@ describe('Hello World', () => {
       it('should work', () => {
          const [result] = runProgram(`
             fib n {
-               if n == 0 then
-                  1
+               if n <= 1 then
+                  n
                else
-                  fib (n - 1) * n
+                  fib (n - 1) + fib (n - 2)
             }
 
             main args {

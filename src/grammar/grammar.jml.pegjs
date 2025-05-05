@@ -120,7 +120,7 @@ Operand "operand"
    / Application
 
 InfixOperator "infix op"
-   = op:( "==" / "!=" / "+" / "*" / "-" ) {
+   = op:( "==" / "!=" / "<=" / ">=" / "<" / ">" / "+" / "*" / "-" ) {
       return withLoc({ type: 'lower-identifier', value: op })
    }
 
