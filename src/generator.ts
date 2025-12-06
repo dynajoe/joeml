@@ -62,11 +62,12 @@ function makeLetExpression(ctx: Ctx, let_expr: T.LetExpression): string {
 
 function makeFunctionCall(ctx: Ctx, fn: T.Application): string {
    // Check if this call is a tail call by looking at all tail calls in the function
-   const tail_calls = tailCalls(ctx.fn.name.value, ctx.fn.body)
+   // If ctx.fn is null (e.g., inside a lambda), there are no tail calls to optimize
+   const tail_calls = ctx.fn ? tailCalls(ctx.fn.name.value, ctx.fn.body) : []
    const isTailCall = tail_calls.some(tc => tc === fn)
-   
-   if (ctx.fn.name.value === fn.name.value && 
-       ctx.fn.parameters.length === fn.parameters.length && 
+
+   if (ctx.fn && ctx.fn.name.value === fn.name.value &&
+       ctx.fn.parameters.length === fn.parameters.length &&
        isTailCall) {
       const params = _.zipWith(
          ctx.fn.parameters,
@@ -83,7 +84,7 @@ function makeFunctionCall(ctx: Ctx, fn: T.Application): string {
       `
    } else {
       // Check if this is a parameter reference (not a function call)
-      if (fn.parameters.length === 0 && ctx.fn && ctx.fn.parameters.some(p => p.value === fn.name.value)) {
+      if (fn.parameters.length === 0 && ctx.fn && ctx.fn.parameters && ctx.fn.parameters.some(p => p.value === fn.name.value)) {
          // This is a parameter reference, not a function call
          return `${ctx.expect_return ? 'return' : ''} ${fn.name.value}`
       }
@@ -116,6 +117,30 @@ export function makeIfExpression(ctx: Ctx, expr: T.IfExpression): string {
    `
 }
 
+function makeLambdaExpression(ctx: Ctx, lambda: T.LambdaExpression): string {
+   const params = lambda.parameters.map(p => p.value).join(', ')
+   const body = generateExpression({ ...ctx, expect_return: true, fn: null }, lambda.body)
+   return `(function (${params}) { ${body} })`
+}
+
+function makeRecordLiteral(ctx: Ctx, record: T.RecordLiteral): string {
+   const fields = record.fields.map(field => {
+      const key = field.name.value
+      const value = generateExpression({ ...ctx, expect_return: false }, field.value)
+      return `${key}: ${value}`
+   }).join(', ')
+
+   const recordObj = `{ ${fields} }`
+   return ctx.expect_return ? `return ${recordObj};` : recordObj
+}
+
+function makeFieldAccess(ctx: Ctx, access: T.FieldAccess): string {
+   const object = access.object.value
+   const fields = access.fields.map(f => f.value).join('.')
+   const accessExpr = `${object}.${fields}`
+   return ctx.expect_return ? `return ${accessExpr};` : accessExpr
+}
+
 export function generateExpression(ctx: Ctx, expr: T.Expression): string {
    if (expr.type === 'application') {
       return makeFunctionCall(ctx, expr)
@@ -123,6 +148,12 @@ export function generateExpression(ctx: Ctx, expr: T.Expression): string {
       return makeLetExpression(ctx, expr)
    } else if (expr.type === 'if-expression') {
       return makeIfExpression(ctx, expr)
+   } else if (expr.type === 'lambda') {
+      return makeLambdaExpression(ctx, expr)
+   } else if (expr.type === 'record-literal') {
+      return makeRecordLiteral(ctx, expr)
+   } else if (expr.type === 'field-access') {
+      return makeFieldAccess(ctx, expr)
    } else if (expr.type === 'string') {
       return `${ctx.expect_return ? `return ${expr.value};` : expr.value}`
    } else if (expr.type === 'number') {
@@ -135,7 +166,7 @@ export function generateExpression(ctx: Ctx, expr: T.Expression): string {
 function tailCalls(fnName: string, expr: T.Expression): T.Application[] {
    // A function call is in tail position if it's the last expression executed
    // before returning from the function
-   
+
    if (expr.type === 'application' && expr.name.value === fnName) {
       return [expr]
    } else if (expr.type === 'if-expression') {
@@ -147,6 +178,15 @@ function tailCalls(fnName: string, expr: T.Expression): T.Application[] {
    } else if (expr.type === 'let-expression') {
       // In a let expression, only the body can contain tail calls
       return tailCalls(fnName, expr.body)
+   } else if (expr.type === 'lambda') {
+      // Lambda expressions create a new scope, so tail calls inside don't apply to outer function
+      return []
+   } else if (expr.type === 'record-literal') {
+      // Record literals don't contain tail calls in tail position
+      return []
+   } else if (expr.type === 'field-access') {
+      // Field access doesn't contain tail calls
+      return []
    } else {
       // Other expressions (numbers, strings, non-recursive calls) can't contain tail calls
       return []

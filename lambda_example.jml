@@ -1,0 +1,3 @@
+apply f x { f x }
+
+main { printLn (apply (\n -> n + 1) 5) }
