@@ -31,7 +31,22 @@ export type IfExpression = {
    true_expression: Expression
    false_expression: Expression
 } & Locatable
-export type Expression = Application | LetExpression | IfExpression | Literal
+export type LambdaExpression = {
+   type: 'lambda'
+   parameters: Identifier[]
+   body: Expression
+} & Locatable
+export type RecordField = { name: Identifier; value: Expression } & Locatable
+export type RecordLiteral = {
+   type: 'record-literal'
+   fields: RecordField[]
+} & Locatable
+export type FieldAccess = {
+   type: 'field-access'
+   object: Identifier
+   fields: Identifier[]
+} & Locatable
+export type Expression = Application | LetExpression | IfExpression | LambdaExpression | RecordLiteral | FieldAccess | Literal
 export type Identifier = {
    type: 'lower-identifier' | 'upper-identifier'
    value: string

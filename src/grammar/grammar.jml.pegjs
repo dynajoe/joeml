@@ -76,6 +76,18 @@ Literal "literal"
    / String
 
 /***
+Lambda expression: \x y -> x + y
+***/
+LambdaExpression "lambda expression" =
+   "\\" parameters:FunctionParameters Ws? "->" Ws? body:Expression {
+      return withLoc({
+         type: 'lambda',
+         parameters: parameters,
+         body: body,
+      })
+   }
+
+/***
 let
    foo { print "a" }
 in {
@@ -91,6 +103,28 @@ LetExpression "let expression" =
          type: 'let-expression',
          bindings: fns,
          body: body,
+      })
+   }
+
+/***
+Record literal: { foo = 1, bar = 2 }
+***/
+RecordField =
+   name:Identifier Ws? "=" Ws? value:Expression {
+      return withLoc({ name: name, value: value })
+   }
+
+RecordFieldList =
+   head:RecordField
+   tail:(WsNL? "," WsNL? field:RecordField { return field })* {
+      return [head].concat(tail)
+   }
+
+RecordLiteral "record literal" =
+   "{" WsNL? fields:RecordFieldList? WsNL? "}" {
+      return withLoc({
+         type: 'record-literal',
+         fields: fields || [],
       })
    }
 
@@ -115,8 +149,11 @@ IfExpression "if expression" =
 Operand "operand"
    = ParenthesizedExpression
    / LetExpression
+   / LambdaExpression
    / IfExpression
+   / RecordLiteral
    / Literal
+   / FieldAccess
    / Application
 
 InfixOperator "infix op"
@@ -127,6 +164,18 @@ InfixOperator "infix op"
 CallOrOperand
    = Application
    / Operand
+
+/***
+Field access: record.field or record.field1.field2
+***/
+FieldAccess "field access" =
+   object:Identifier fields:("." field:Identifier { return field })+ {
+      return withLoc({
+         type: 'field-access',
+         object: object,
+         fields: fields,
+      })
+   }
 
 Application
    = name:Identifier operands:(Ws e:Operand { return e; })* {

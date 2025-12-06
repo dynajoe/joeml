@@ -1,0 +1,9 @@
+createPerson name age { { name = name, age = age } }
+
+main {
+  let
+    alice { createPerson "Alice" 30 }
+  in {
+    printLn alice.name
+  }
+}
